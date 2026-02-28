@@ -1,0 +1,141 @@
+/* RESET GENERAL */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* FONDO BARBERÍA + OVERLAY OSCURO */
+body {
+    position: relative;
+    min-height: 100vh;
+    margin: 0;
+    background: 
+        linear-gradient(rgba(0,0,0,0.65), rgba(0,0,0,0.65)),
+        url("/static/images/barber_bg.jpg") no-repeat center center fixed;
+    background-size: cover;
+    color: white;
+}
+
+/* CONTENEDOR GENERAL */
+.container {
+    position: relative;
+    z-index: 1;
+    width: 90%;
+    max-width: 1200px;
+    margin: auto;
+    padding: 40px 0;
+    text-align: center;
+}
+
+/* TITULO PRINCIPAL */
+h1 {
+    font-size: 3.5rem;
+    margin-bottom: 10px;
+    text-shadow: 0 0 15px rgba(0,0,0,0.8);
+}
+
+/* SUBTITULO */
+.subtitle {
+    font-size: 1.8rem;
+    opacity: 0.85;
+    margin-bottom: 20px;
+}
+
+/* FECHA Y HORA */
+.fecha-hora {
+    font-size: 2rem;
+    margin-bottom: 30px;
+    opacity: 0.9;
+}
+
+/* TARJETAS */
+.card {
+    background: rgba(255,255,255,0.08);
+    backdrop-filter: blur(10px);
+    border-radius: 18px;
+    padding: 30px;
+    margin-bottom: 30px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+}
+
+/* TITULOS DE SECCION */
+.section-title {
+    font-size: 2rem;
+    margin-bottom: 20px;
+    text-shadow: 0 0 10px rgba(0,0,0,0.6);
+}
+
+/* TURNO ACTUAL */
+.turno-actual {
+    background: linear-gradient(135deg, #1e7f43, #145c32);
+    font-size: 3.5rem;
+    font-weight: bold;
+    padding: 40px;
+    border-radius: 14px;
+    animation: glow 2s infinite;
+}
+
+/* INFO ADICIONAL DEL TURNO */
+.turno-info {
+    font-size: 1.8rem;
+    opacity: 0.9;
+    margin-top: 10px;
+}
+
+/* LISTA DE PRÓXIMOS TURNOS */
+ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+li {
+    font-size: 2rem;
+    padding: 15px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+/* HORA, Silla y Barbero en lista */
+.hora-turno {
+    font-size: 1.5rem;
+    opacity: 0.85;
+    margin-top: 5px;
+}
+
+/* BARRA DE PROGRESO DEL TURNO ACTUAL */
+.barra-progreso {
+    height: 25px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 15px;
+    overflow: hidden;
+    margin-top: 20px;
+}
+
+.barra-progreso-inner {
+    height: 100%;
+    background: #4caf50;
+    width: 0%;
+    transition: width 1s linear;
+    border-radius: 15px;
+}
+
+/* EFECTO GLOW DEL TURNO ACTUAL */
+@keyframes glow {
+    0% { box-shadow: 0 0 15px #00ff99; }
+    50% { box-shadow: 0 0 35px #00ff99; }
+    100% { box-shadow: 0 0 15px #00ff99; }
+}
+
+/* RESPONSIVE TV */
+@media screen and (max-width: 768px) {
+    h1 { font-size: 2.5rem; }
+    .subtitle { font-size: 1.5rem; }
+    .turno-actual { font-size: 2.5rem; padding: 25px; }
+    li { font-size: 1.5rem; }
+    .turno-info, .hora-turno { font-size: 1.3rem; }
+}

@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Mi Turno 💈</title>
+
+<!-- ========================= -->
+<!-- PWA -->
+<!-- ========================= -->
+<link rel="manifest" href="/static/cliente/manifest.json">
+<meta name="theme-color" content="#00ff99">
+
+
+<style>
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
+    font-family:'Segoe UI',Tahoma;
+}
+body{
+    min-height:100vh;
+    background:url("/static/images/barber_bg.jpg") no-repeat center center/cover;
+    color:white;
+    position:relative;
+}
+body::before{
+    content:"";
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.65);
+    z-index:0;
+}
+.container{
+    position:relative;
+    z-index:1;
+    max-width:500px;
+    margin:auto;
+    padding:30px 20px;
+}
+h1{
+    text-align:center;
+    font-size:2.5rem;
+    margin-bottom:20px;
+}
+.card{
+    background:rgba(255,255,255,0.08);
+    backdrop-filter:blur(10px);
+    border-radius:18px;
+    padding:20px;
+    margin-bottom:20px;
+    box-shadow:0 15px 30px rgba(0,0,0,0.6);
+}
+.card h2{
+    text-align:center;
+    margin-bottom:15px;
+}
+input,select,button{
+    width:100%;
+    padding:12px;
+    margin-top:10px;
+    border-radius:10px;
+    border:none;
+    font-size:1rem;
+}
+input,select{
+    background:#111;
+    color:white;
+}
+button{
+    background:#00ff99;
+    font-weight:bold;
+    cursor:pointer;
+}
+.estado{
+    font-size:1.2rem;
+    text-align:center;
+    line-height:1.6;
+}
+.turnos-delante{
+    margin-top:10px;
+    font-size:1rem;
+    opacity:0.9;
+}
+.barra{
+    height:10px;
+    background:rgba(255,255,255,0.2);
+    border-radius:10px;
+    overflow:hidden;
+    margin-top:10px;
+}
+.barra-inner{
+    height:100%;
+    width:0%;
+    background:#00ff99;
+    transition:width 1s linear;
+}
+#btnCancelar{
+    margin-top:10px;
+    background:#ff4d4d;
+}
+
+/* ===== BOTÓN INSTALAR PWA ===== */
+#btnInstall{
+    display:none;
+    background:#1e90ff;
+    color:white;
+    font-weight:bold;
+    margin-bottom:15px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+    <h1>💈 Mi Turno</h1>
+
+    <!-- ===== BOTÓN INSTALAR APP ===== -->
+    <button id="btnInstall">📲 Instalar App</button>
+
+    <div class="card">
+        <h2>Inscribirse</h2>
+        <input id="nombre" placeholder="Tu nombre">
+        <select id="barbero"></select>
+        <select id="hora"></select>
+        <button onclick="registrar()">Tomar Turno</button>
+    </div>
+
+    <div class="card" id="estadoCard" style="display:none">
+        <h2>Estado del Turno</h2>
+        <div class="estado" id="estado"></div>
+        <div class="turnos-delante" id="cola"></div>
+        <div class="barra">
+            <div class="barra-inner" id="barra"></div>
+        </div>
+        <button id="btnCancelar" onclick="cancelarTurno()">Cancelar Turno</button>
+    </div>
+</div>
+
+<script>
+let turnoId = localStorage.getItem("turnoId");
+let horaTurno = localStorage.getItem("horaTurno");
+let duracion = 0;
+let barberoIdSeleccionado = localStorage.getItem("barberoId");
+
+async function cargarBarberos() {
+    const res = await fetch("/turnos/barberos");
+    const data = await res.json();
+
+    const sel = document.getElementById("barbero");
+    sel.innerHTML = "";
+
+    if (!data.barberos || data.barberos.length === 0) {
+        sel.innerHTML = `<option>No hay barberos disponibles</option>`;
+        return;
+    }
+
+    data.barberos.forEach(b => {
+        sel.innerHTML += `
+            <option 
+                value="${b.id}" 
+                data-silla="${b.silla}"
+                data-duracion="${b.duracion}">
+                ${b.nombre} - Silla ${b.silla}
+            </option>`;
+    });
+
+    if (barberoIdSeleccionado) {
+        sel.value = barberoIdSeleccionado;
+    }
+
+    cargarHoras();
+}
+
+async function cargarHoras() {
+    const barberoSel = barbero.options[barbero.selectedIndex];
+    if (!barberoSel) return;
+
+    barberoIdSeleccionado = barberoSel.value;
+    localStorage.setItem("barberoId", barberoIdSeleccionado);
+
+    duracion = parseInt(barberoSel.dataset.duracion);
+
+    const res = await fetch(`/cliente/horas?barbero_id=${barberoIdSeleccionado}`);
+    const data = await res.json();
+
+    hora.innerHTML = "";
+    data.horas.forEach(h => {
+        hora.innerHTML += `<option value="${h}">${formato12h(h)}</option>`;
+    });
+}
+
+barbero.onchange = cargarHoras;
+
+async function registrar() {
+    const nombreCliente = nombre.value.trim();
+    if (!nombreCliente || !hora.value) {
+        alert("Completa todos los campos");
+        return;
+    }
+
+    const res = await fetch(
+        `/cliente/registrar?nombre=${nombreCliente}&barbero_id=${barberoIdSeleccionado}&hora=${hora.value}`,
+        { method: "POST" }
+    );
+    const data = await res.json();
+
+    turnoId = data.turno.id;
+    horaTurno = hora.value;
+
+    localStorage.setItem("turnoId", turnoId);
+    localStorage.setItem("horaTurno", horaTurno);
+
+    estadoCard.style.display = "block";
+    actualizarEstado();
+    cargarHoras();
+}
+
+async function actualizarEstado() {
+    if (!turnoId) return;
+
+    const res = await fetch(`/cliente/estado?turno_id=${turnoId}`);
+    const data = await res.json();
+
+    if (data.cerrado) {
+        limpiarEstado();
+        return;
+    }
+
+    estado.innerHTML = `
+        🕒 Hora: <b>${formato12h(horaTurno)}</b><br>
+        Estado: <b>${data.estado}</b><br>
+        ⏳ Faltan <b>${data.faltan_minutos}</b> minutos
+    `;
+
+    cola.innerHTML = `👥 Personas delante: ${data.personas_delante}`;
+
+    let progreso = 0;
+    if (data.estado === "atendiendo") {
+        progreso = 100 - Math.min(100, (data.faltan_minutos / duracion) * 100);
+    }
+    barra.style.width = progreso + "%";
+
+    estadoCard.style.display = "block";
+}
+
+async function cancelarTurno() {
+    if(!turnoId) return;
+    if(!confirm("¿Deseas cancelar tu turno?")) return;
+
+    await fetch(`/cliente/cancelar?turno_id=${turnoId}`, { method:"POST" });
+    limpiarEstado();
+    cargarHoras();
+}
+
+function limpiarEstado(){
+    turnoId = null;
+    horaTurno = null;
+    localStorage.clear();
+    estadoCard.style.display = "none";
+}
+
+function formato12h(hora24) {
+    const [h, m] = hora24.split(":").map(Number);
+    const h12 = h % 12 || 12;
+    const ampm = h >= 12 ? "PM" : "AM";
+    return `${h12}:${String(m).padStart(2,"0")} ${ampm}`;
+}
+
+// INIT
+cargarBarberos();
+if (turnoId) actualizarEstado();
+setInterval(actualizarEstado, 3000);
+</script>
+
+<!-- ===== SERVICE WORKER ===== -->
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/static/cliente/service-worker.js');
+}
+</script>
+
+<!-- ===== BOTÓN INSTALAR PWA ===== -->
+<script>
+let deferredPrompt;
+const btnInstall = document.getElementById("btnInstall");
+
+window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    btnInstall.style.display = "block";
+});
+
+btnInstall.addEventListener("click", async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    btnInstall.style.display = "none";
+});
+</script>
+
+</body>
+</html>
+<script>
+window.addEventListener("appinstalled", () => {
+    alert("✅ App instalada correctamente");
+});
+</script>

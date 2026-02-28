@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Barbería - Control de Turnos</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin:0;
+    padding:0;
+    min-height:100vh;
+    background: url("/static/images/barber_bg.jpg") no-repeat center center/cover;
+    color: #fff;
+    position: relative;
+}
+body::before {
+    content:"";
+    position: fixed;
+    top:0; left:0; width:100%; height:100%;
+    background: rgba(0,0,0,0.65);
+    z-index:0;
+}
+.container { position: relative; z-index:1; max-width: 900px; margin:auto; padding:20px; }
+.card { background: rgba(255,255,255,0.1); padding:20px; margin-bottom:20px; border-radius:15px; }
+h1,h2 { text-align:center; }
+input, select, button { padding:8px; margin:5px; font-size:1rem; border-radius:5px; border:none; }
+button { cursor:pointer; background:#1e7f43; color:#fff; }
+ul { list-style:none; padding:0; color:#fff; }
+li { padding:5px; border-bottom:1px solid rgba(255,255,255,0.3); }
+.turnos-actuales-container { display:flex; gap:20px; justify-content:center; flex-wrap:wrap; }
+.turno-actual { display:flex; flex-direction:column; gap:8px; background: rgba(0,255,153,0.2); padding:10px 12px; border-radius:10px; font-weight:bold; min-width: 250px; font-size: 0.85rem; }
+.turno-texto { display:flex; flex-direction:column; gap:3px; font-size:0.85rem; }
+.botones-turno { display:flex; gap:5px; }
+.botones-turno button { flex:1; padding:5px; font-size:0.8rem; background:#1e7f43; color:#fff; cursor:pointer; }
+#btnReiniciar { background: #ff4d4d; margin-top:10px; }
+
+/* ===== NUEVO ===== */
+.controles-sonido {
+    display:flex;
+    justify-content:center;
+    gap:15px;
+    margin-top:10px;
+}
+.controles-sonido button {
+    background:#333;
+}
+.activo {
+    background:#1e7f43 !important;
+}
+.inactivo {
+    background:#777 !important;
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>💈 Turno Barber </h1>
+    <!-- Configuración de horarios -->
+    <section class="card">
+        <h2>Configurar Horario del Día</h2>
+        <label>Inicio:</label>
+        <input type="time" id="horaInicio" value="09:00">
+        <label>Fin:</label>
+        <input type="time" id="horaFin" value="20:00">
+        <button id="btnConfigHorario">Guardar Horario</button>
+        <button id="btnReiniciar">Reiniciar Todo</button>
+        <p id="mensajeHorario"></p>
+    </section>
+
+    <!-- Agregar barberos -->
+    <section class="card">
+        <h2>Agregar Barbero y Silla (Máx 2)</h2>
+        <input type="text" id="nombreBarbero" placeholder="Nombre del barbero">
+        <input type="text" id="sillaBarbero" placeholder="Número o nombre de silla">
+        <label>Duración promedio:</label>
+        <select id="duracionTurno"></select>
+        <button id="btnAgregarBarbero">Agregar Barbero</button>
+        <ul id="listaBarberos"></ul>
+    </section>
+
+    <!-- Agregar cliente -->
+    <section class="card">
+        <h2>Agregar Cliente</h2>
+        <input type="text" id="nombreCliente" placeholder="Nombre del cliente">
+        <select id="selectBarbero"></select>
+        <p id="duracionBarberoInfo" style="opacity:.85; font-size:.9rem;"></p>
+        <select id="selectHora"></select>
+        <button id="btnAgregarCliente">Agregar Turno</button>
+        <p id="mensajeCliente"></p>
+    </section>
+
+    <!-- Turnos actuales -->
+    <section class="card">
+        <h2>Turnos Actuales</h2>
+        <div id="turnosActuales" class="turnos-actuales-container">Cargando...</div>
+    </section>
+
+    <!-- Cola de turnos -->
+    <section class="card">
+        <h2>Cola de Turnos</h2>
+        <ul id="listaTurnos">Cargando...</ul>
+    </section>
+</div>
+
+<script>
+const API_URL = "http://127.0.0.1:8000/turnos";
+
+/* ===== RESTO DE TU CÓDIGO ORIGINAL (SIN CAMBIOS) ===== */
+
+let horarioInicio = null;
+let horarioFin = null;
+let barberos = [];
+let turnosOcupados = [];
+let horaSeleccionada = null;
+
+const selectDuracion = document.getElementById("duracionTurno");
+const selectHora = document.getElementById("selectHora");
+const selectBarbero = document.getElementById("selectBarbero");
+const duracionBarberoInfo = document.getElementById("duracionBarberoInfo");
+const btnConfigHorario = document.getElementById("btnConfigHorario");
+const btnReiniciar = document.getElementById("btnReiniciar");
+const horaInicioInput = document.getElementById("horaInicio");
+const horaFinInput = document.getElementById("horaFin");
+const mensajeHorario = document.getElementById("mensajeHorario");
+const btnAgregarBarbero = document.getElementById("btnAgregarBarbero");
+const nombreBarberoInput = document.getElementById("nombreBarbero");
+const sillaBarberoInput = document.getElementById("sillaBarbero");
+const listaBarberos = document.getElementById("listaBarberos");
+const nombreClienteInput = document.getElementById("nombreCliente");
+const btnAgregarCliente = document.getElementById("btnAgregarCliente");
+const turnosActualesContainer = document.getElementById("turnosActuales");
+const listaTurnos = document.getElementById("listaTurnos");
+
+/* ===== DURACIONES ===== */
+for (let i = 15; i <= 60; i += 5) {
+    const opt = document.createElement("option");
+    opt.value = i;
+    opt.textContent = `${i} minutos`;
+    if (i === 30) opt.selected = true;
+    selectDuracion.appendChild(opt);
+}
+
+/* ===== JORNADA ===== */
+async function cargarJornada() {
+    const res = await fetch(`${API_URL}/jornada`);
+    if (!res.ok) return;
+    const data = await res.json();
+    horarioInicio = data.inicio;
+    horarioFin = data.fin;
+    horaInicioInput.value = horarioInicio;
+    horaFinInput.value = horarioFin;
+    mensajeHorario.textContent = horarioInicio && horarioFin ? 
+        `Horario activo: ${formato12h(horarioInicio)} - ${formato12h(horarioFin)}` : 
+        "Horario no definido";
+}
+
+btnConfigHorario.addEventListener("click", async () => {
+    const inicio = horaInicioInput.value;
+    const fin = horaFinInput.value;
+    if (!inicio || !fin) return alert("Define horario válido");
+    await fetch(`${API_URL}/crear_jornada?inicio=${inicio}&fin=${fin}`, { method: "POST" });
+    await cargarJornada();
+    await cargarBarberos();
+    await cargarTurnos();
+});
+
+/* ===== REINICIAR TODO ===== */
+btnReiniciar.addEventListener("click", async () => {
+    if(!confirm("¿Desea reiniciar todo? Se eliminarán horarios, barberos y turnos.")) return;
+    turnosActualesContainer.innerHTML = "<p>No hay turnos</p>";
+    listaTurnos.innerHTML = "<p>No hay turnos</p>";
+    selectBarbero.innerHTML = "";
+    selectHora.innerHTML = "";
+    listaBarberos.innerHTML = "";
+    horarioInicio = null;
+    horarioFin = null;
+    barberos = [];
+    turnosOcupados = [];
+    horaSeleccionada = null;
+    horaInicioInput.value = "";
+    horaFinInput.value = "";
+    mensajeHorario.textContent = "Horario no definido";
+    await fetch(`${API_URL}/reiniciar`, { method: "POST" });
+    cargarTurnos();
+});
+
+/* ===== BARBEROS ===== */
+async function cargarBarberos() {
+    const res = await fetch(`${API_URL}/barberos`);
+    if (!res.ok) return;
+    const data = await res.json();
+    barberos = data.barberos || [];
+    actualizarListaBarberos();
+    actualizarSelectBarberos();
+}
+
+btnAgregarBarbero.addEventListener("click", async () => {
+    if (barberos.length >= 2) return alert("Máximo 2 barberos");
+    const nombre = nombreBarberoInput.value.trim();
+    const silla = sillaBarberoInput.value.trim();
+    const duracion = selectDuracion.value;
+    if (!nombre || !silla) return alert("Completa los datos");
+    await fetch(`${API_URL}/agregar_barbero?nombre=${nombre}&silla=${silla}&duracion=${duracion}`, { method: "POST" });
+    nombreBarberoInput.value = "";
+    sillaBarberoInput.value = "";
+    cargarBarberos();
+});
+
+function actualizarListaBarberos() {
+    listaBarberos.innerHTML = "";
+    barberos.forEach(b => {
+        const li = document.createElement("li");
+        li.textContent = `${b.nombre} - Silla ${b.silla} (${b.duracion} min)`;
+        listaBarberos.appendChild(li);
+    });
+}
+
+function actualizarSelectBarberos() {
+    selectBarbero.innerHTML = "";
+    barberos.forEach(b => {
+        const opt = document.createElement("option");
+        opt.value = b.id;
+        opt.textContent = `${b.nombre} - Silla ${b.silla}`;
+        selectBarbero.appendChild(opt);
+    });
+    cargarHorasDisponiblesPorBarbero();
+}
+
+function cargarHorasDisponiblesPorBarbero() {
+    selectHora.innerHTML = "";
+    const barberoId = parseInt(selectBarbero.value);
+    const barbero = barberos.find(b => b.id === barberoId);
+    if (!barbero || !horarioInicio || !horarioFin) return;
+    duracionBarberoInfo.textContent = `⏱ Duración: ${barbero.duracion} min`;
+
+    let actual = new Date(`1970-01-01T${horarioInicio}:00`);
+    const cierre = new Date(`1970-01-01T${horarioFin}:00`);
+
+    while (actual < cierre) {
+        const hora = actual.toTimeString().slice(0, 5);
+        if (!turnosOcupados.includes(`${barbero.id}-${hora}`) || hora === horaSeleccionada) {
+            const opt = document.createElement("option");
+            opt.value = hora;
+            opt.textContent = formato12h(hora);
+            selectHora.appendChild(opt);
+        }
+        actual.setMinutes(actual.getMinutes() + parseInt(barbero.duracion));
+    }
+    if (horaSeleccionada) selectHora.value = horaSeleccionada;
+}
+
+selectHora.addEventListener("change", () => { horaSeleccionada = selectHora.value });
+
+/* ===== CLIENTES ===== */
+btnAgregarCliente.addEventListener("click", async () => {
+    const nombre = nombreClienteInput.value.trim();
+    const hora = selectHora.value;
+    const barberoId = parseInt(selectBarbero.value);
+    if (!nombre || !hora || !barberoId) return alert("Completa los datos");
+    await fetch(`${API_URL}/registrar?nombre=${nombre}&hora=${hora}&barbero_id=${barberoId}`, { method: "POST" });
+    nombreClienteInput.value = "";
+    horaSeleccionada = null;
+    cargarTurnos();
+});
+
+/* ===== TURNOS ===== */
+async function cargarTurnos() {
+    const res = await fetch(`${API_URL}/todos`);
+    if (!res.ok) return;
+    const data = await res.json();
+    turnosActualesContainer.innerHTML = "";
+    listaTurnos.innerHTML = "";
+    turnosOcupados = [];
+
+    if (!data.turnos || data.turnos.length === 0) {
+        turnosActualesContainer.innerHTML = "<p>No hay turnos</p>";
+        listaTurnos.innerHTML = "<p>No hay turnos</p>";
+        return;
+    }
+
+    const turnoActualPorBarbero = {};
+    data.turnos.forEach(t => {
+        turnosOcupados.push(`${t.barbero_id}-${t.hora}`);
+        if (!turnoActualPorBarbero[t.barbero_id]) turnoActualPorBarbero[t.barbero_id] = [];
+        turnoActualPorBarbero[t.barbero_id].push(t);
+    });
+
+    // Mostrar solo un turno por barbero
+    Object.keys(turnoActualPorBarbero).forEach(barberoId => {
+        const turnos = turnoActualPorBarbero[barberoId].filter(t => t.estado !== "finalizado");
+        if(turnos.length > 0){
+            const t = turnos[0];
+            const div = document.createElement("div");
+            div.className = "turno-actual";
+            div.dataset.id = t.id;
+            div.innerHTML = `
+                <div class="turno-texto">
+                    <strong>#${t.numero} - ${t.cliente}</strong>
+                    <div>💈 ${t.barbero} | Silla ${t.silla} | ${formato12h(t.hora)}</div>
+                    <div class="botones-turno">
+                        <button class="atender">Atender</button>
+                        <button class="finalizar">Finalizar</button>
+                        <button class="liberar">Liberar</button>
+                    </div>
+                </div>`;
+            turnosActualesContainer.appendChild(div);
+
+            div.querySelector(".atender").addEventListener("click", () => atenderTurno(t.id));
+            div.querySelector(".finalizar").addEventListener("click", () => finalizarTurno(t.id));
+            div.querySelector(".liberar").addEventListener("click", async () => {
+                const numero = prompt(`Ingrese el número del turno de ${t.cliente} para liberar:`);
+                if (!numero) return;
+                await fetch(`${API_URL}/liberar?barbero_id=${t.barbero_id}&hora=${t.hora}&numero=${numero}`, { method:"POST" });
+                cargarTurnos();
+            });
+        }
+    });
+
+    // Turnos esperando en cola
+    data.turnos.filter(t => t.estado === "esperando").forEach(t => {
+        const li = document.createElement("li");
+        li.textContent = `#${t.numero} - ${t.cliente} | 💈 ${t.barbero} | Silla ${t.silla} | ${formato12h(t.hora)}`;
+        listaTurnos.appendChild(li);
+    });
+
+    cargarHorasDisponiblesPorBarbero();
+}
+
+/* ===== FUNCIONES BOTONES ===== */
+async function atenderTurno(id){ 
+    if(!id) return alert("Turno inválido");
+    await fetch(`${API_URL}/atender?turno_id=${id}`, { method:"POST" }); 
+    cargarTurnos(); 
+}
+
+async function finalizarTurno(id){ 
+    if(!id) return alert("Turno inválido");
+    await fetch(`${API_URL}/finalizar?turno_id=${id}`, { method:"POST" }); 
+    cargarTurnos(); 
+}
+
+/* ===== UTIL ===== */
+function formato12h(h){ 
+    const [hh, mm]=h.split(":").map(Number); 
+    const h12=hh%12||12; 
+    return `${h12}:${mm.toString().padStart(2,"0")} ${hh>=12?"PM":"AM"}` 
+}
+
+/* ===== INIT ===== */
+async function init(){ 
+    await cargarJornada(); 
+    await cargarBarberos(); 
+    await cargarTurnos(); 
+}
+init();
+setInterval(cargarTurnos, 3000);
+</script>
